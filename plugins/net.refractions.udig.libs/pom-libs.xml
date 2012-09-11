@@ -37,8 +37,10 @@
         <imageio-ext.version>1.1.5</imageio-ext.version>
         <jfreechart.version>1.0.13</jfreechart.version>
         
-        <lib.dir>${basedir}/lib</lib.dir>
-        <lib.source.dir>${basedir}/lib-src</lib.source.dir>
+        <lib.dir.folder>lib</lib.dir.folder>
+        <lib.dir>${basedir}/${lib.dir.folder}</lib.dir>
+        <lib.source.dir.folder>lib-src</lib.source.dir.folder>
+        <lib.source.dir>${basedir}/${lib.source.dir.folder}</lib.source.dir>
     </properties>
 
     <repositories>
@@ -829,12 +831,26 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-antrun-plugin</artifactId>
                 <version>1.7</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.apache.ant</groupId>
+                        <artifactId>ant</artifactId>
+                        <version>1.8.4</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>ant-contrib</groupId>
+                        <artifactId>ant-contrib</artifactId>
+                        <version>1.0b3</version>
+                    </dependency>
+                </dependencies>
                 <executions>
                     <execution>
                         <id>remove-lib-timestamp</id>
                         <phase>compile</phase>
                         <configuration>
                             <target>
+                                <taskdef resource="net/sf/antcontrib/antlib.xml" classpathref="maven.plugin.classpath" />
+                                
                                 <macrodef name="remove-lib-timestamp">
                                     <attribute name="lib-dir"/>
                                     <sequential>
@@ -852,6 +868,72 @@
                                 
                                 <remove-lib-timestamp lib-dir="${lib.dir}"/>
                                 <remove-lib-timestamp lib-dir="${lib.source.dir}"/>
+                                
+                                <!-- update classpath -->
+                                <property name="classpath.file" value="${basedir}/.classpath"/>
+                                
+                                <delete file="${classpath.file}"/>
+                                
+                                <var name="num.files" value="1"/>
+                                
+                                <for param="file">
+                                    <path>
+                                        <fileset dir="${lib.dir}">
+                                            <include name="**/*.jar"/>
+                                        </fileset>
+                                    </path>
+                                    <sequential>
+                                        <math result="num.files" operand1="${num.files}" operation="+" operand2="1" datatype="int"/>
+                                    </sequential>
+                                </for>
+                                
+                                <var name="current.index" value="1"/>
+                                
+                                <var name="lib.entries" value="" />
+                                
+                                <for param="file">
+                                    <path>
+                                        <fileset dir="${lib.dir}">
+                                            <include name="**/*.jar"/>
+                                        </fileset>
+                                    </path>
+                                    <sequential>
+                                        <math result="current.index" operand1="${current.index}" operation="+" operand2="1" datatype="int"/>
+                                        
+                                        <propertyregex override="yes" property="jarFile"
+                                            input="@{file}" regexp=".*/(.*\.jar)" replace="\1"/>
+                                        <propertyregex override="yes" property="jarSourcesFile"
+                                            input="@{file}" regexp=".*/(.*)(\.jar)" replace="\1-sources\2"/>
+                                        
+                                        <var name="lib.entries" value="${lib.entries}&#9;&lt;classpathentry exported=&quot;true&quot; kind=&quot;lib&quot; path=&quot;${lib.dir.folder}/${jarFile}&quot;"/>
+                                        
+                                        <if>
+                                            <available file="${lib.source.dir}/${jarSourcesFile}"/>
+                                            <then>
+                                                <var name="lib.entries" value="${lib.entries} sourcepath=&quot;${lib.source.dir.folder}/${jarSourcesFile}&quot;" />
+                                            </then>
+                                        </if>
+                                        
+                                        <var name="lib.entries" value="${lib.entries}/&gt;" />
+                                        
+                                        <if>
+                                            <not>
+                                                <equals arg1="${current.index}" arg2="${num.files}"/>
+                                            </not>
+                                            <then>
+                                                <var name="lib.entries" value="${lib.entries}${line.separator}" />
+                                            </then>
+                                        </if>
+                                    </sequential>
+                                </for>
+                                
+                                <copy file="${basedir}/classpath" toFile="${classpath.file}">
+                                    <filterchain>
+                                        <replacetokens>
+                                            <token key="libs" value="${lib.entries}"/>
+                                        </replacetokens>
+                                   </filterchain>
+                                </copy>
                             </target>
                         </configuration>
                         <goals>
